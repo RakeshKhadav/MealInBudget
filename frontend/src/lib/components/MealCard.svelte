@@ -10,23 +10,21 @@
 
 	let { meal, onclick }: Props = $props();
 
-	const typeMeta: Record<MealType, { icon: IconName; tile: string; bar: string; label: string }> = {
-		breakfast: { icon: 'Sunrise', tile: 'bg-secondary/20 text-secondary-content', bar: 'bg-secondary', label: 'Breakfast' },
-		lunch: { icon: 'Sun', tile: 'bg-accent/20 text-accent-content', bar: 'bg-accent', label: 'Lunch' },
-		dinner: { icon: 'Moon', tile: 'bg-primary/15 text-primary', bar: 'bg-primary', label: 'Dinner' }
-	};
+	let imgFailed = $state(false);
 
-	const difficultyClass = $derived(
-		meal.difficulty.toLowerCase().includes('easy')
-			? 'badge-success'
-			: meal.difficulty.toLowerCase().includes('hard')
-				? 'badge-error'
-				: 'badge-warning'
-	);
+	$effect(() => {
+		imgFailed = false;
+	});
+
+	const typeMeta: Record<MealType, { icon: IconName; emoji: string; tile: string; label: string }> = {
+		breakfast: { icon: 'Sunrise', emoji: '🌅', tile: 'bg-secondary/20', label: 'Breakfast' },
+		lunch: { icon: 'Sun', emoji: '☀️', tile: 'bg-accent/20', label: 'Lunch' },
+		dinner: { icon: 'Moon', emoji: '🌙', tile: 'bg-primary/12', label: 'Dinner' }
+	};
 </script>
 
 <div
-	class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
+	class="rounded-3xl bg-base-100 card-lift cursor-pointer overflow-hidden font-display"
 	role="button"
 	tabindex="0"
 	onclick={onclick}
@@ -37,45 +35,47 @@
 		}
 	}}
 >
-	<div class="h-1 {typeMeta[meal.meal_type].bar}"></div>
-	<div class="card-body p-4">
-		<div class="flex justify-between items-start gap-2">
-			<div class="flex items-center gap-2.5">
-				<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl {typeMeta[meal.meal_type].tile}">
-					<Icon name={typeMeta[meal.meal_type].icon} size={20} />
-				</span>
-				<div>
-					<h3 class="font-display font-semibold leading-tight">{meal.meal_name}</h3>
-					<p class="text-xs text-base-content/60">
-						{typeMeta[meal.meal_type].label} · {meal.cuisine}
-					</p>
-				</div>
-			</div>
-			<div class="flex flex-col items-end gap-1 shrink-0">
-				<span class="badge badge-ghost badge-sm gap-1">
-					<Icon name="Clock" size={12} />
+	{#if meal.image_url && !imgFailed}
+		<div class="relative h-32 w-full overflow-hidden">
+			<img
+				src={meal.image_url}
+				alt={meal.meal_name}
+				class="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+				loading="lazy"
+				onerror={() => (imgFailed = true)}
+			/>
+			<div class="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent"></div>
+			<span class="absolute left-3 top-3 badge badge-ghost border-0 bg-black/35 text-white backdrop-blur-sm gap-1">
+				<Icon name={typeMeta[meal.meal_type].icon} size={12} />
+				{typeMeta[meal.meal_type].label}
+			</span>
+		</div>
+	{:else}
+		<div class="relative flex h-32 w-full items-center justify-center {typeMeta[meal.meal_type].tile}">
+			<span class="text-5xl drop-shadow-sm">{typeMeta[meal.meal_type].emoji}</span>
+			<span class="absolute left-3 top-3 badge badge-ghost border-0 bg-white/70 text-base-content/70 backdrop-blur-sm gap-1">
+				<Icon name={typeMeta[meal.meal_type].icon} size={12} />
+				{typeMeta[meal.meal_type].label}
+			</span>
+		</div>
+	{/if}
+	<div class="flex items-center gap-3 p-4">
+		<div class="min-w-0 flex-1">
+			<h3 class="font-bold leading-tight truncate">{meal.meal_name}</h3>
+			<p class="text-xs text-base-content/50 mt-1 inline-flex items-center gap-1.5">
+				<span class="inline-flex items-center gap-0.5">
+					<Icon name="Clock" size={11} />
 					{meal.cooking_time_mins} min
 				</span>
-				<span class="badge {difficultyClass} badge-sm">{meal.difficulty}</span>
-			</div>
+				<span class="opacity-40">·</span>
+				{meal.cuisine}
+			</p>
 		</div>
-		<div class="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-base-content/70 mt-1.5 border-t border-base-300 pt-2.5">
-			<span class="inline-flex items-center gap-1">
-				<Icon name="Flame" size={13} class="text-error/70" />
-				{meal.nutritional_info.calories} cal
+		<span class="shrink-0 rounded-2xl bg-primary/10 ring-1 ring-primary/10 px-3 py-2 text-center">
+			<span class="block font-extrabold leading-none text-primary">
+				{meal.nutritional_info.calories}
 			</span>
-			<span class="inline-flex items-center gap-1">
-				<Icon name="Drumstick" size={13} class="text-primary/70" />
-				{meal.nutritional_info.protein_g}g protein
-			</span>
-			<span class="inline-flex items-center gap-1">
-				<Icon name="Wheat" size={13} class="text-warning/70" />
-				{meal.nutritional_info.carbs_g}g carbs
-			</span>
-			<span class="inline-flex items-center gap-1">
-				<Icon name="Droplets" size={13} class="text-info/70" />
-				{meal.nutritional_info.fat_g}g fat
-			</span>
-		</div>
+			<span class="block text-[10px] text-base-content/50 mt-0.5">cal</span>
+		</span>
 	</div>
 </div>

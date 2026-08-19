@@ -21,10 +21,11 @@ export interface NutritionalInfo {
 }
 
 export interface Meal {
-  day: number;
-  date: string;
-  meal_type: MealType;
-  meal_name: string;
+	day: number;
+	date: string;
+	meal_type: MealType;
+	meal_name: string;
+	image_url: string;
   cuisine: string;
   cooking_time_mins: number;
   difficulty: string;
@@ -70,6 +71,7 @@ export interface GenerateResponse {
   meals: Meal[];
   shopping_list: ShoppingListCategory[];
   nutritional_summary: NutritionalSummary;
+  seasonal_note?: string;
 }
 
 export interface PlanSummary {

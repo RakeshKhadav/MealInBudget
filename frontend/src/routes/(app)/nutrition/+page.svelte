@@ -57,33 +57,6 @@
 			: []
 	);
 
-	const goalStatus = $derived.by(() => {
-		if (!plan) return null;
-		const p = plan.nutritional_summary;
-		const t = moodMeta.targets;
-		if (mood === 'protein_packed') {
-			const diff = p.daily_avg_protein - t.protein;
-			return diff >= 0
-				? `Your meals match your '${moodMeta.emoji} ${moodMeta.label}' goal perfectly!`
-				: `Protein is ${Math.abs(diff)}g below your ${moodMeta.label} target (${t.protein}g).`;
-		}
-		if (mood === 'low_calorie') {
-			const diff = p.daily_avg_calories - t.calories;
-			return diff <= 0
-				? `Your meals stay under your ${moodMeta.label} calorie target (${t.calories} cal).`
-				: `Calories are ${diff} over your ${moodMeta.label} target (${t.calories} cal).`;
-		}
-		if (mood === 'budget_minimal') {
-			return `Your meals are tuned for maximum value on a ${moodMeta.label} budget.`;
-		}
-		if (mood === 'quick_easy') {
-			return `Your meals are designed to be ${moodMeta.label} — all under 30 mins.`;
-		}
-		return `Your meals are built for a ${moodMeta.emoji} ${moodMeta.label} week.`;
-	});
-
-	const goalPositive = $derived(!/below|over|miss/.test(goalStatus ?? ''));
-
 	const peopleNote = $derived(
 		mealPlan.lastInputs?.people_count ? `Averages shown are per person for a household of ${mealPlan.lastInputs.people_count}.` : 'Averages shown are per person.'
 	);
@@ -94,36 +67,43 @@
 </svelte:head>
 
 {#if !plan}
-	<div class="text-center py-16 space-y-4">
-		<span class="flex mx-auto h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-			<Icon name="ChartColumn" size={28} />
-		</span>
-		<p class="font-medium">No meal plan yet.</p>
-		<p class="text-sm text-base-content/60 -mt-2">Generate a plan to see nutrition breakdowns.</p>
-		<a href="/generate" class="btn btn-primary gap-1.5">
-			<Icon name="Sparkles" size={16} />
-			Generate a plan
+	<div class="text-center py-20 space-y-4 font-display">
+		<span class="flex mx-auto h-20 w-20 items-center justify-center rounded-3xl bg-accent/15 text-4xl">📊</span>
+		<p class="font-display text-xl font-extrabold">No nutrition yet</p>
+		<p class="text-sm text-base-content/50 -mt-1">Generate a plan and we'll break down the numbers.</p>
+		<a href="/generate" class="btn btn-primary btn-lg rounded-full px-8 gap-2 shadow-lg shadow-primary/25 mt-2">
+			<Icon name="Sparkles" size={18} />
+			Make my menu
 		</a>
 	</div>
 {:else}
-	<div class="space-y-5">
-		<div>
-			<h1 class="font-display text-2xl font-extrabold inline-flex items-center gap-2">
-				<Icon name="ChartColumn" size={22} class="text-primary" />
-				Weekly Nutrition
-			</h1>
-			<p class="text-sm text-base-content/60 mt-1">{peopleNote}</p>
+	<div class="space-y-5 font-display">
+		<div class="text-center">
+			<span class="text-3xl leading-none">📊</span>
+			<h1 class="font-display text-2xl font-extrabold leading-tight mt-1">Weekly nutrition</h1>
+			<p class="text-xs text-base-content/50 mt-1">{peopleNote}</p>
 		</div>
 
-		<div class="alert {goalPositive ? 'alert-success' : 'alert-warning'} text-sm shadow-sm">
-			<Icon name={goalPositive ? 'CircleCheck' : 'CircleAlert'} size={20} />
-			<span>{goalStatus}</span>
+		<div class="rounded-3xl bg-sunset p-5 text-white shadow-lg shadow-primary/20 text-center">
+			<span class="inline-flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-wide">
+				Daily average
+				<span class="text-lg leading-none">🔥</span>
+			</span>
+			<div class="flex items-baseline justify-center gap-1 mt-1">
+				<span class="font-display text-4xl font-extrabold tabular-nums">{plan.nutritional_summary.daily_avg_calories}</span>
+				<span class="text-white/70 text-sm font-medium">cal</span>
+			</div>
+			<div class="flex flex-wrap justify-center gap-2 mt-3">
+				<span class="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-semibold">🍗 {plan.nutritional_summary.daily_avg_protein}g protein</span>
+				<span class="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-semibold">🌾 {plan.nutritional_summary.daily_avg_carbs}g carbs</span>
+				<span class="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-semibold">💧 {plan.nutritional_summary.daily_avg_fat}g fat</span>
+			</div>
 		</div>
 
-		<div class="card bg-base-100 shadow-sm">
-			<div class="card-body p-5">
-				<h2 class="font-semibold mb-1">Daily Average vs {moodMeta.emoji} {moodMeta.label} Target</h2>
-				<div class="grid grid-cols-2 gap-5 pt-2">
+		<div class="rounded-3xl bg-base-100 card-lift">
+			<div class="p-5">
+				<h2 class="font-display font-bold text-center">Daily average vs {moodMeta.emoji} {moodMeta.label}</h2>
+				<div class="grid grid-cols-2 gap-5 pt-4">
 					{#each progress as stat (stat.label)}
 						{@const pct = Math.min(Math.round((stat.value / stat.target) * 100), 100)}
 						<div class="flex flex-col items-center gap-1.5">
@@ -151,38 +131,34 @@
 		</div>
 
 		<div>
-			<h2 class="text-lg font-semibold mb-3">Daily Average</h2>
+			<h2 class="font-display text-lg font-bold text-center mb-3">Daily average</h2>
 			<div class="grid grid-cols-2 gap-3">
 				{#each daily as stat (stat.label)}
-					<div class="card bg-base-100 shadow-sm card-lift">
-						<div class="card-body p-4">
-							<div class="flex items-center gap-2 mb-1">
-								<span class="flex h-8 w-8 items-center justify-center rounded-xl {stat.tile}">
-									<Icon name={stat.icon} size={16} />
-								</span>
-								<span class="text-sm text-base-content/60">{stat.label}</span>
-							</div>
-							<p class="font-display text-2xl font-bold">
-								{stat.value}<span class="text-sm font-normal text-base-content/60">{stat.unit}</span>
-							</p>
-						</div>
+					<div class="rounded-3xl bg-base-100 card-lift p-4 flex flex-col items-center text-center">
+						<span class="flex h-10 w-10 items-center justify-center rounded-2xl {stat.tile}">
+							<Icon name={stat.icon} size={18} />
+						</span>
+						<p class="font-display text-2xl font-bold mt-2">
+							{stat.value}<span class="text-sm font-normal text-base-content/60">{stat.unit}</span>
+						</p>
+						<span class="text-xs text-base-content/50">{stat.label}</span>
 					</div>
 				{/each}
 			</div>
 		</div>
 
-		<div class="card bg-base-100 shadow-sm">
-			<div class="card-body p-4 space-y-2.5">
-				<h2 class="font-semibold">Weekly Total</h2>
-				{#each daily as stat (stat.label)}
-					<div class="flex items-center justify-between text-sm">
-						<span class="inline-flex items-center gap-2 text-base-content/70">
+		<div class="rounded-3xl bg-base-100 card-lift">
+			<div class="p-4 space-y-2.5 text-center">
+				<h2 class="font-display font-bold">Weekly total</h2>
+				<div class="flex flex-wrap justify-center gap-x-4 gap-y-2">
+					{#each daily as stat (stat.label)}
+						<span class="inline-flex items-center gap-1.5 text-sm">
 							<Icon name={stat.icon} size={15} class={stat.color} />
-							{stat.label}
+							<span class="text-base-content/70">{stat.label}</span>
+							<span class="font-bold">{stat.value * 7}{stat.unit}</span>
 						</span>
-						<span class="font-semibold">{stat.value * 7}{stat.unit}</span>
-					</div>
-				{/each}
+					{/each}
+				</div>
 			</div>
 		</div>
 	</div>

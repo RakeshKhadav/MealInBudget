@@ -2,29 +2,54 @@ import type { GenerateRequest, GenerateResponse, Preferences } from '$lib/types/
 
 const API_URL = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3000/api';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-	const res = await fetch(`${API_URL}${path}`, {
-		headers: { 'Content-Type': 'application/json' },
-		...init
-	});
+export type GenerateJobStatus = 'queued' | 'generating' | 'completed' | 'failed';
 
-	if (!res.ok) {
-		let message = `Request failed: ${res.status}`;
-		try {
-			const body = await res.json();
-			message = body.error ?? message;
-		} catch {
-			// ignore
+export interface GenerateJobResult {
+	job_id: string;
+	status: GenerateJobStatus;
+	stage?: string;
+	pct?: number;
+	error?: string;
+	plan?: GenerateResponse;
+}
+
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 20000): Promise<T> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const res = await fetch(`${API_URL}${path}`, {
+			headers: { 'Content-Type': 'application/json' },
+			...init,
+			signal: controller.signal
+		});
+
+		if (!res.ok) {
+			let message = `Request failed: ${res.status}`;
+			try {
+				const body = await res.json();
+				message = body.error ?? message;
+			} catch {
+				// ignore
+			}
+			throw new Error(message);
 		}
-		throw new Error(message);
-	}
 
-	return res.json() as Promise<T>;
+		return res.json() as Promise<T>;
+	} catch (e) {
+		if (e instanceof DOMException && e.name === 'AbortError') {
+			throw new Error('Request timed out - please try again');
+		}
+		throw e;
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 export const api = {
 	generate: (input: GenerateRequest) =>
-		request<GenerateResponse>('/meals/generate', { method: 'POST', body: JSON.stringify(input) }),
+		request<GenerateJobResult>('/meals/generate', { method: 'POST', body: JSON.stringify(input) }),
+
+	getGenerateStatus: (jobId: string) => request<GenerateJobResult>(`/meals/generate/${jobId}`),
 
 	getPlan: (id: string) => request<{ meal_plan: GenerateResponse; variants: unknown[] }>(`/meals/${id}`),
 

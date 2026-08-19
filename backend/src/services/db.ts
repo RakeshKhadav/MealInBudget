@@ -1,10 +1,12 @@
-import type { GenerateResponse, PlanSummary, Preferences } from "../types/index.js";
+import type { GenerateRequest, GenerateResponse, PlanSummary, Preferences } from "../types/index.js";
 
 const plans = new Map<string, GenerateResponse>();
+const planInputs = new Map<string, GenerateRequest>();
 const recentIds: string[] = [];
 
-export function savePlan(plan: GenerateResponse): void {
+export function savePlan(plan: GenerateResponse, input?: GenerateRequest): void {
   plans.set(plan.meal_plan_id, plan);
+  if (input) planInputs.set(plan.meal_plan_id, input);
   recentIds.unshift(plan.meal_plan_id);
   if (recentIds.length > 20) recentIds.pop();
 }
@@ -16,10 +18,11 @@ export function getPlan(id: string): GenerateResponse | undefined {
 export function listRecentPlans(): PlanSummary[] {
   return recentIds.map((id) => {
     const p = plans.get(id)!;
+    const input = planInputs.get(id);
     return {
       id: p.meal_plan_id,
       week_start_date: p.week_start_date,
-      moods: ["spicy_indian"],
+      moods: input?.moods ?? [],
       status: "active",
     };
   });

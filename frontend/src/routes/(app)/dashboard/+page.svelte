@@ -1,63 +1,64 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { mealPlan } from '$lib/stores/mealPlan.svelte.js';
-	import { api } from '$lib/services/api.js';
 	import Icon from '$lib/components/Icon.svelte';
-	import type { GenerateRequest } from '$lib/types/index.js';
+	import type { IconName } from '$lib/types/icons.js';
+	import type { MealType } from '$lib/types/index.js';
 
-	let regenerating = $state(false);
+	const plan = $derived(mealPlan.current);
 
-	const saved = $derived(mealPlan.savedPlans);
-	const recent = $derived(saved.slice(0, 3));
-	const currentPlan = $derived(mealPlan.current);
+	const today = $derived(new Date());
 
-	const currentStatus = $derived.by(() => {
-		if (!currentPlan) return { label: 'No active meal plan', variant: 'warning' as const };
-		const end = new Date(currentPlan.week_end_date);
-		const today = new Date();
-		const daysLeft = Math.ceil((end.getTime() - today.getTime()) / 86400000);
-		if (daysLeft < 0) return { label: 'Your last meal plan ended', variant: 'neutral' as const };
-		if (daysLeft === 0) return { label: 'Your meal plan ends today', variant: 'warning' as const };
-		return { label: `${daysLeft} day${daysLeft === 1 ? '' : 's'} left on this plan`, variant: 'success' as const };
+	function parseDate(s: string): Date {
+		const [y, m, d] = s.split('-').map(Number);
+		return new Date(y, m - 1, d);
+	}
+
+	const isCurrentWeek = $derived(
+		plan !== null &&
+			today >= parseDate(plan.week_start_date) &&
+			today <= new Date(`${plan.week_end_date}T23:59:59`)
+	);
+
+	const greeting = $derived.by(() => {
+		const h = today.getHours();
+		if (h < 12) return 'Good morning!';
+		if (h < 17) return 'Good afternoon!';
+		return 'Good evening!';
 	});
 
 	const budget = $derived(mealPlan.lastInputs?.budget ?? 0);
+	const people = $derived(mealPlan.lastInputs?.people_count);
+
 	const costMin = $derived(
-		(currentPlan?.shopping_list ?? []).reduce((acc, cat) => acc + cat.items.reduce((s, i) => s + i.est_price_min, 0), 0)
+		(plan?.shopping_list ?? []).reduce((acc, cat) => acc + cat.items.reduce((s, i) => s + i.est_price_min, 0), 0)
 	);
 	const costMax = $derived(
-		(currentPlan?.shopping_list ?? []).reduce((acc, cat) => acc + cat.items.reduce((s, i) => s + i.est_price_max, 0), 0)
+		(plan?.shopping_list ?? []).reduce((acc, cat) => acc + cat.items.reduce((s, i) => s + i.est_price_max, 0), 0)
 	);
 	const budgetPct = $derived(budget > 0 ? Math.min(Math.round((costMax / budget) * 100), 100) : 0);
 	const withinBudget = $derived(budget === 0 || costMax <= budget);
+	const overAmount = $derived(costMax - budget);
 
-	const weekday = $derived(
-		new Date().toLocaleDateString('en-IN', { weekday: 'long' })
-	);
+	const daysLeft = $derived.by(() => {
+		if (!plan) return 0;
+		return Math.max(0, Math.ceil((parseDate(plan.week_end_date).getTime() - today.getTime()) / 86400000));
+	});
 
-	function openPlan(id: string) {
-		mealPlan.loadPlan(id);
-		goto('/meal-plan');
+	const typeMeta: Record<MealType, { icon: IconName; label: string; tile: string }> = {
+		breakfast: { icon: 'Sunrise', label: 'Breakfast', tile: 'bg-secondary/25 text-secondary-content' },
+		lunch: { icon: 'Sun', label: 'Lunch', tile: 'bg-accent/25 text-accent-content' },
+		dinner: { icon: 'Moon', label: 'Dinner', tile: 'bg-primary/15 text-primary' }
+	};
+
+	let failedImages = $state<string[]>([]);
+
+	function mealKey(day: number, mealType: MealType): string {
+		return `${day}-${mealType}`;
 	}
 
-	async function useSame() {
-		await goto('/generate?use=last');
-	}
-
-	async function repeat() {
-		if (!mealPlan.lastInputs) return;
-		regenerating = true;
-		try {
-			const plan = await api.generate(mealPlan.lastInputs as GenerateRequest);
-			await mealPlan.setPlan(plan);
-			await goto('/meal-plan');
-		} finally {
-			regenerating = false;
-		}
-	}
-
-	function formatWeek(p: { week_start_date: string; week_end_date: string }) {
-		return `${p.week_start_date} – ${p.week_end_date}`;
+	function onImgError(key: string) {
+		if (!failedImages.includes(key)) failedImages = [...failedImages, key];
 	}
 </script>
 
@@ -65,125 +66,122 @@
 	<title>Dashboard - MealinBudget</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<div>
-		<h1 class="font-display text-2xl font-extrabold">
-			{weekday}&rsquo;s dinners are covered.
-		</h1>
-		<p class="text-sm text-base-content/60 mt-1">
-			{#if currentPlan}
-				{currentStatus.label}
-			{:else}
-				No active meal plan yet — one tap and you&rsquo;re set.
-			{/if}
-		</p>
+{#if mealPlan.loading}
+	<div class="space-y-6 font-display">
+		<div class="space-y-2">
+			<div class="skeleton h-8 w-48"></div>
+			<div class="skeleton h-4 w-32"></div>
+		</div>
+		<div class="skeleton h-44 w-full rounded-3xl"></div>
+		<div class="flex gap-3 overflow-hidden">
+			{#each [0, 1, 2] as i (i)}
+				<div class="skeleton h-40 w-36 shrink-0 rounded-3xl"></div>
+			{/each}
+		</div>
 	</div>
+{:else if !isCurrentWeek}
+	<div class="flex flex-col items-center text-center pt-14 pb-6 font-display">
+		<span class="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/12 text-primary mb-5">
+			<Icon name="Utensils" size={40} />
+		</span>
+		<h1 class="font-display text-2xl font-extrabold">{greeting}</h1>
+		<p class="text-sm text-base-content/60 mt-1">No budget set for this week yet.</p>
+		<a
+			href="/generate"
+			class="btn btn-primary btn-xl gap-2 px-8 rounded-full shadow-lg shadow-primary/25 mt-7"
+		>
+			<Icon name="Sparkles" size={20} />
+			Set budget for this week
+		</a>
+	</div>
+{:else if plan}
+	<div class="space-y-6 font-display">
+		<div>
+			<h1 class="font-display text-2xl font-extrabold">{greeting}</h1>
+			<p class="text-sm text-base-content/60 mt-0.5">Your week, sorted.</p>
+		</div>
 
-	{#if currentPlan}
-		<div class="card bg-gradient-to-br from-primary to-primary/80 text-primary-content shadow-lg shadow-primary/25">
+		<div
+			class="card {withinBudget ? 'bg-sunset' : 'bg-gradient-to-br from-error to-error/85'} text-primary-content shadow-lg shadow-primary/25"
+		>
 			<div class="card-body p-5">
 				<div class="flex items-center justify-between mb-1">
-					<span class="text-sm font-medium text-primary-content/80">Weekly budget</span>
-					<span class="badge badge-ghost badge-sm bg-white/20 text-white border-0">{currentPlan.meals.length} meals</span>
-				</div>
-				{#if budget > 0}
-				<p class="font-display text-3xl font-extrabold">
-					₹{budget}
-						<span class="text-base font-medium text-primary-content/70">
-							· est. ₹{costMin}-{costMax}
-						</span>
-					</p>
-					<div class="bg-white/20 rounded-full p-1 mt-3">
-						<progress
-							class="progress {withinBudget ? 'progress-success' : 'progress-error'} w-full"
-							value={budgetPct}
-							max="100"
-						></progress>
-					</div>
-					<p class="mt-2 text-sm text-primary-content/85">
-						{withinBudget
-							? `Within budget — estimated ₹${costMin}-${costMax} vs ₹${budget}`
-							: `Over budget — estimated ₹${costMin}-${costMax} vs ₹${budget}`}
-					</p>
-				{:else}
-					<p class="font-display text-3xl font-extrabold">₹{costMin}-{costMax}</p>
-					<p class="mt-1 text-sm text-primary-content/70">Estimated shopping cost</p>
-				{/if}
-			</div>
-		</div>
-	{:else}
-		<div class="alert alert-warning shadow-sm">
-			<Icon name="Info" size={20} />
-			<span>{currentStatus.label}</span>
-		</div>
-	{/if}
-
-	<div class="join w-full">
-		<a href="/generate" class="btn btn-primary join-item flex-1 gap-1.5">
-			<Icon name="Plus" size={18} />
-			Generate New
-		</a>
-		<button
-			class="btn btn-outline join-item flex-1 gap-1.5"
-			onclick={useSame}
-			disabled={!mealPlan.lastInputs}
-			title={mealPlan.lastInputs ? '' : 'Generate a plan first to reuse its settings'}
-		>
-			<Icon name="Settings2" size={18} />
-			Use Same
-		</button>
-		<button class="btn btn-outline join-item flex-1 gap-1.5" onclick={repeat} disabled={!mealPlan.lastInputs}>
-			{#if regenerating}
-				<span class="loading loading-spinner loading-sm"></span>
-			{:else}
-				<Icon name="RefreshCw" size={18} />
-			{/if}
-			Repeat
-		</button>
-	</div>
-
-	<div>
-		<h2 class="font-display text-lg font-semibold mb-3">Recent Plans</h2>
-		{#if mealPlan.loading}
-			<div class="space-y-3">
-				{#each [0, 1, 2] as i}
-					<div class="skeleton h-20 w-full"></div>
-				{/each}
-			</div>
-		{:else if recent.length === 0}
-			<div class="card bg-base-200/60">
-				<div class="card-body items-center text-center text-base-content/60 py-10">
-					<span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-primary mb-2">
-						<Icon name="Utensils" size={28} />
+					<span class="text-sm font-medium text-primary-content/80">This week's budget</span>
+					<span class="badge badge-ghost border-0 bg-white/20 text-white badge-sm">
+						{daysLeft} day{daysLeft === 1 ? '' : 's'} left
 					</span>
-					<p class="text-sm font-medium text-base-content/80 mb-1">Nothing planned yet.</p>
-					<p class="text-xs mb-4">Pick a budget, get a week of meals and a shopping list.</p>
-					<a href="/generate" class="btn btn-primary btn-sm gap-1.5">
-						<Icon name="Sparkles" size={16} />
-						Plan my first week
-					</a>
+				</div>
+				<p class="font-display text-4xl font-extrabold">
+					₹{budget.toLocaleString('en-IN')}
+					<span class="text-base font-medium text-primary-content/70">· est. ₹{costMin}-{costMax}</span>
+				</p>
+				<div class="bg-white/20 rounded-full p-1 mt-4">
+					<progress
+						class="progress {withinBudget ? 'progress-success' : 'progress-error'} w-full"
+						value={budgetPct}
+						max="100"
+					></progress>
+				</div>
+				<div class="flex items-center justify-between mt-3 text-sm text-primary-content/85">
+					<span class="inline-flex items-center gap-1.5">
+						<Icon name="Users" size={15} />
+						{people} {people === 1 ? 'person' : 'people'}
+					</span>
+					<span class="inline-flex items-center gap-1.5">
+						<Icon name="Utensils" size={15} />
+						{plan.meals.length} meals
+					</span>
+					<span class="inline-flex items-center gap-1.5">
+						<Icon name="Wallet" size={15} />
+						{#if withinBudget}In budget{:else}Over by ₹{overAmount}{/if}
+					</span>
 				</div>
 			</div>
-		{:else}
-			<div class="list bg-base-100 shadow-sm rounded-box border border-base-300/70 divide-y divide-base-300/70">
-				{#each recent as plan (plan.meal_plan_id)}
-					<button
-						type="button"
-						class="list-row w-full text-left cursor-pointer hover:bg-primary/5 transition-colors"
-						onclick={() => openPlan(plan.meal_plan_id)}
-					>
-						<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary">
-							<Icon name="CalendarDays" size={20} />
-						</span>
-						<div class="flex-1">
-							<h3 class="font-semibold">Week of {formatWeek(plan)}</h3>
-							<p class="text-xs text-base-content/60">{plan.meals.length} meals planned</p>
-						</div>
-						<span class="badge badge-primary badge-sm shrink-0">{plan.meals.length} meals</span>
-						<Icon name="ChevronRight" size={18} class="text-base-content/40 shrink-0" />
-					</button>
+		</div>
+
+		<div>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="font-display text-lg font-semibold">This week's meals</h2>
+				<a href="/meal-plan" class="text-sm font-medium text-primary inline-flex items-center gap-0.5">
+					See all
+					<Icon name="ChevronRight" size={15} />
+				</a>
+			</div>
+			<div class="carousel carousel-horizontal carousel-start gap-3 -mx-4 px-4 overflow-x-auto no-scrollbar snap-x pb-1">
+				{#each plan.meals as meal (mealKey(meal.day, meal.meal_type))}
+					{@const key = mealKey(meal.day, meal.meal_type)}
+					<div class="carousel-item snap-start">
+						<button
+							type="button"
+							class="w-36 card bg-base-100 shadow-sm overflow-hidden text-left shrink-0 transition-transform active:scale-[0.97]"
+							onclick={() => goto('/meal-plan')}
+						>
+							{#if meal.image_url && !failedImages.includes(key)}
+								<div class="h-24 w-full overflow-hidden">
+									<img
+										src={meal.image_url}
+										alt={meal.meal_name}
+										class="h-full w-full object-cover"
+										loading="lazy"
+										onerror={() => onImgError(key)}
+									/>
+								</div>
+							{:else}
+								<div class="flex h-24 w-full items-center justify-center {typeMeta[meal.meal_type].tile}">
+									<Icon name={typeMeta[meal.meal_type].icon} size={28} />
+								</div>
+							{/if}
+							<div class="p-2.5">
+								<p class="font-display text-sm font-semibold truncate">{meal.meal_name}</p>
+								<p class="text-[11px] text-base-content/60 inline-flex items-center gap-1 mt-0.5">
+									<Icon name="Clock" size={11} />
+									{meal.cooking_time_mins} min · {typeMeta[meal.meal_type].label}
+								</p>
+							</div>
+						</button>
+					</div>
 				{/each}
 			</div>
-		{/if}
+		</div>
 	</div>
-</div>
+{/if}

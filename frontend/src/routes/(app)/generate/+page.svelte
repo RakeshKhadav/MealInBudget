@@ -55,6 +55,7 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let offline = $state(false);
+	let progress = $state<{ stage: string; pct: number } | null>(null);
 
 	$effect(() => {
 		if (!browser) return;
@@ -145,6 +146,7 @@
 	async function generate() {
 		loading = true;
 		error = null;
+		progress = null;
 		try {
 			const input: GenerateRequest = {
 				budget,
@@ -153,9 +155,32 @@
 				dietary_restrictions: [...dietary],
 				appliances: [...appliances]
 			};
-			const plan = await api.generate(input);
-			await mealPlan.setPlan(plan, input);
-			await goto('/meal-plan');
+			const res = await api.generate(input);
+
+			if (res.status === 'completed' && res.plan) {
+				await mealPlan.setPlan(res.plan, input);
+				await goto('/meal-plan');
+				return;
+			}
+			if (res.status === 'failed') {
+				throw new Error(res.error ?? 'Failed to generate meal plan');
+			}
+
+			const started = Date.now();
+			while (Date.now() - started < 240000) {
+				await new Promise((r) => setTimeout(r, 1500));
+				const status = await api.getGenerateStatus(res.job_id);
+				if (status.status === 'completed' && status.plan) {
+					await mealPlan.setPlan(status.plan, input);
+					await goto('/meal-plan');
+					return;
+				}
+				if (status.status === 'failed') {
+					throw new Error(status.error ?? 'Failed to generate meal plan');
+				}
+				progress = { stage: status.stage ?? 'Working', pct: status.pct ?? 0 };
+			}
+			throw new Error('Generation is taking longer than expected - please try again.');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to generate meal plan';
 			loading = false;
@@ -171,7 +196,7 @@
 	<title>Generate Meal Plan - MealinBudget</title>
 </svelte:head>
 
-<div class="flex flex-col min-h-[calc(100dvh-8.5rem)]">
+<div class="flex flex-col min-h-[calc(100dvh-6.75rem)]">
 	<div class="flex items-center gap-3">
 		<button
 			class="btn btn-circle btn-ghost btn-sm shrink-0 -ml-2 text-base-content/60"
@@ -194,8 +219,8 @@
 	</div>
 
 	{#key step}
-		<div class="mt-8 flex-1 {direction > 0 ? 'anim-fwd' : 'anim-back'}">
-			<h1 class="font-display text-3xl font-extrabold leading-tight">{QUESTIONS[step]}</h1>
+		<div class="mt-5 flex-1 {direction > 0 ? 'anim-fwd' : 'anim-back'}">
+			<h1 class="font-display text-2xl font-extrabold leading-tight">{QUESTIONS[step]}</h1>
 
 			<div class="mt-8">
 				{#if step === 0}
@@ -270,24 +295,24 @@
 						Pick both for a mix of veg and non-veg meals
 					</p>
 				{:else if step === 3}
-					<div class="grid grid-cols-2 gap-3">
+					<div class="grid grid-cols-2 gap-2.5">
 						{#each MOODS as m (m.value)}
 							<button
 								type="button"
-								class="rounded-3xl p-4 text-left transition-all {moods.includes(m.value)
-									? 'bg-primary/10 ring-2 ring-primary'
-									: 'bg-base-200/60 hover:bg-base-200'}"
+class="rounded-3xl p-3 text-left transition-all {moods.includes(m.value)
+								? 'bg-primary/10 ring-2 ring-primary'
+								: 'bg-base-200/60 hover:bg-base-200'}"
 								onclick={() => toggleMood(m.value)}
 								aria-pressed={moods.includes(m.value)}
 							>
-								<span class="text-3xl leading-none">{m.emoji}</span>
-								<span class="block font-display text-base font-bold mt-2">{m.label}</span>
+								<span class="text-2xl leading-none">{m.emoji}</span>
+								<span class="block font-display text-sm font-bold mt-1">{m.label}</span>
 							</button>
 {/each}
 				</div>
-				<div class="flex justify-center mt-6">
+				<div class="flex justify-center mt-3">
 					<button
-						class="btn btn-primary btn-xl gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
+						class="btn btn-primary btn-lg gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
 						disabled={!stepValid || offline}
 						onclick={next}
 					>
@@ -296,25 +321,25 @@
 					</button>
 				</div>
 			{:else if step === 4}
-				<div class="grid grid-cols-2 gap-3">
+				<div class="grid grid-cols-2 gap-2.5">
 					{#each OTHER_DIETARY as opt (opt.value)}
 						<button
 							type="button"
-							class="rounded-3xl p-4 text-center transition-all {dietary.includes(opt.value)
+							class="rounded-3xl p-2.5 text-center transition-all {dietary.includes(opt.value)
 								? 'bg-primary/10 ring-2 ring-primary'
 								: 'bg-base-200/60 hover:bg-base-200'}"
 							onclick={() => toggleDiet(opt.value)}
 							aria-pressed={dietary.includes(opt.value)}
 						>
-							<span class="text-4xl leading-none">{opt.emoji}</span>
-							<span class="block font-display text-base font-bold mt-2">{opt.label}</span>
+							<span class="text-2xl leading-none">{opt.emoji}</span>
+							<span class="block font-display text-sm font-bold mt-1">{opt.label}</span>
 						</button>
 					{/each}
 				</div>
-<p class="text-sm text-base-content/50 mt-4">Only pick what matters — none is fine.</p>
-					<div class="flex justify-center mt-6">
+<p class="text-sm text-base-content/50 mt-2">Only pick what matters — none is fine.</p>
+					<div class="flex justify-center mt-2">
 						<button
-							class="btn btn-primary btn-xl gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
+							class="btn btn-primary btn-lg gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
 							disabled={!stepValid || offline}
 							onclick={next}
 						>
@@ -323,30 +348,30 @@
 						</button>
 					</div>
 				{:else if step === 5}
-				<div class="grid grid-cols-2 gap-3">
+				<div class="grid grid-cols-2 gap-2.5">
 					{#each APPLIANCE_OPTIONS as opt (opt.value)}
 						<button
 							type="button"
-							class="rounded-3xl p-4 text-center transition-all {appliances.includes(opt.value)
+							class="rounded-3xl p-2.5 text-center transition-all {appliances.includes(opt.value)
 								? 'bg-secondary/15 ring-2 ring-secondary'
 								: 'bg-base-200/60 hover:bg-base-200'}"
 							onclick={() => toggleAppliance(opt.value)}
 							aria-pressed={appliances.includes(opt.value)}
 						>
 							<span
-								class="inline-flex h-12 w-12 items-center justify-center rounded-2xl {appliances.includes(opt.value)
+								class="inline-flex h-9 w-9 items-center justify-center rounded-2xl {appliances.includes(opt.value)
 									? 'bg-secondary/25 text-secondary-content'
 									: 'bg-base-100 text-base-content/60'}"
 							>
-								<Icon name={opt.icon} size={24} />
+								<Icon name={opt.icon} size={20} />
 							</span>
-							<span class="block font-display text-base font-bold mt-2">{opt.label}</span>
+							<span class="block font-display text-sm font-bold mt-1">{opt.label}</span>
 						</button>
 {/each}
 				</div>
-				<div class="flex justify-center mt-6">
+				<div class="flex justify-center mt-2">
 					<button
-						class="btn btn-primary btn-xl gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
+						class="btn btn-primary btn-lg gap-2 px-8 rounded-full shadow-lg shadow-primary/25"
 						disabled={!stepValid || offline}
 						onclick={next}
 					>
@@ -355,10 +380,28 @@
 					</button>
 				</div>
 			{:else}
+				{#if loading}
+					<div class="rounded-3xl bg-base-200/60 p-6 text-center">
+						<div class="text-5xl leading-none animate-bounce">👨‍🍳</div>
+						<h2 class="font-display text-xl font-extrabold mt-3">AI is cooking your week…</h2>
+						<p class="text-sm text-base-content/60 mt-1 min-h-5">
+							{progress?.stage ?? 'Starting…'} · {progress?.pct ?? 0}%
+						</p>
+						<progress
+							class="progress progress-primary w-full mt-4"
+							value={progress?.pct ?? 0}
+							max="100"
+						></progress>
+						<p class="text-xs text-base-content/40 mt-4">
+							Searching recipes, food photos & Blinkit/Zepto prices — this can take a
+							couple of minutes.
+						</p>
+					</div>
+				{:else}
 				<div class="grid grid-cols-2 gap-3">
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-primary/10 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-primary/10 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(0)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -372,7 +415,7 @@
 					</button>
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-secondary/15 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-secondary/15 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(1)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -386,7 +429,7 @@
 					</button>
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-accent/20 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-accent/20 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(2)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -400,7 +443,7 @@
 					</button>
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-primary/10 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-primary/10 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(3)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -414,7 +457,7 @@
 					</button>
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-secondary/15 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-secondary/15 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(4)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -430,7 +473,7 @@
 					</button>
 					<button
 						type="button"
-						class="h-24 rounded-3xl bg-accent/20 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
+						class="h-20 rounded-3xl bg-accent/20 p-3 flex flex-col justify-between text-left shadow-sm transition-transform active:scale-[0.97]"
 						onclick={() => goToStep(5)}
 					>
 						<span class="flex w-full items-center gap-1.5">
@@ -445,20 +488,17 @@
 						>
 					</button>
 				</div>
-				<div class="flex justify-center mt-6">
+				<div class="flex justify-center mt-4">
 					<button
 						class="btn btn-primary btn-xl gap-2 px-8 rounded-full ring-2 ring-primary/60 shadow-[0_0_18px_4px] shadow-primary/40"
 						disabled={offline}
 						onclick={next}
 					>
-						{#if loading}
-							<span class="loading loading-spinner"></span>
-						{:else}
-							<Icon name="Sparkles" size={20} />
-						{/if}
+						<Icon name="Sparkles" size={20} />
 						Generate plan
 					</button>
 				</div>
+				{/if}
 			{/if}
 
 			{#if error}
@@ -476,8 +516,6 @@
 			</div>
 		</div>
 	{/key}
-
-	<div class="h-24"></div>
 </div>
 
 {#if step < 3}

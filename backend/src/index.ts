@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { config } from "./constants/config.js";
 import { mealsGenerateRouter } from "./routes/mealsGenerate.js";
 import { mealsRouter } from "./routes/meals.js";
@@ -13,8 +14,28 @@ const app = express();
 app.use(cors({ origin: config.corsOrigin.split(",") }));
 app.use(express.json());
 
+const rateLimitMessage = (retryAfter: number) =>
+  `Too many requests - please wait about ${Math.max(1, Math.ceil(retryAfter / 60))} minute(s) before trying again.`;
+
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 60_000,
+    limit: config.rateLimitGlobalPerMin,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res, next, options) => {
+      res.status(429).json({ error: rateLimitMessage(options.windowMs) });
+    },
+  }),
+);
+
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    gemini: config.geminiApiKey ? "configured" : "missing",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use("/api/meals/generate", mealsGenerateRouter);

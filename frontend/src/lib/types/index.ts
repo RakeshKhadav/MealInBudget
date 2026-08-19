@@ -27,6 +27,7 @@ export interface Meal {
 	date: string;
 	meal_type: MealType;
 	meal_name: string;
+	image_url?: string;
 	cuisine: string;
 	cooking_time_mins: number;
 	difficulty: string;

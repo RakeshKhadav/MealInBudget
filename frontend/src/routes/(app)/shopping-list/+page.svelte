@@ -40,7 +40,7 @@
 	);
 	const purchasedPct = $derived(totalItems > 0 ? Math.round((purchased.length / totalItems) * 100) : 0);
 
-	const aisleColors = ['bg-primary', 'bg-secondary', 'bg-accent', 'bg-info', 'bg-warning'];
+	const aisleEmojis = ['🥬', '🥩', '🥛', '🍞', '🧺'];
 
 	function buildText(): string {
 		if (!plan) return '';
@@ -88,62 +88,59 @@
 </svelte:head>
 
 {#if !plan}
-	<div class="text-center py-16 space-y-4">
-		<span class="flex mx-auto h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-			<Icon name="ShoppingCart" size={28} />
-		</span>
-		<p class="font-medium">No meal plan yet.</p>
-		<p class="text-sm text-base-content/60 -mt-2">Generate a plan to get your shopping list.</p>
-		<a href="/generate" class="btn btn-primary gap-1.5">
-			<Icon name="Sparkles" size={16} />
-			Generate a plan
+	<div class="text-center py-20 space-y-4 font-display">
+		<span class="flex mx-auto h-20 w-20 items-center justify-center rounded-3xl bg-secondary/15 text-4xl">🛒</span>
+		<p class="font-display text-xl font-extrabold">No list yet</p>
+		<p class="text-sm text-base-content/50 -mt-1">Generate a plan and we'll prep your shopping list.</p>
+		<a href="/generate" class="btn btn-primary btn-lg rounded-full px-8 gap-2 shadow-lg shadow-primary/25 mt-2">
+			<Icon name="Sparkles" size={18} />
+			Make my menu
 		</a>
 	</div>
 {:else}
-	<div class="space-y-5">
+	<div class="space-y-5 font-display">
 		<div class="hidden print:block text-center mb-4">
 			<h1 class="text-xl font-bold">MealinBudget Shopping List</h1>
 			<p class="text-sm">Week of {plan.week_start_date} · Estimated total ₹{totalMin}-{totalMax}</p>
 			<hr class="my-3" />
 		</div>
 
-		<div class="flex items-center justify-between print:hidden">
-			<div>
-				<h1 class="font-display text-2xl font-extrabold">Shopping List</h1>
-				<p class="text-sm text-base-content/60 mt-0.5">Week of {plan.week_start_date}</p>
-			</div>
-			<span class="badge badge-outline badge-lg border-base-300">{purchased.length}/{totalItems} done</span>
+		<div class="text-center print:hidden">
+			<span class="text-3xl leading-none">🛒</span>
+			<h1 class="font-display text-2xl font-extrabold leading-tight mt-1">Shopping list</h1>
+			<p class="text-xs text-base-content/50 mt-1">Week of {plan.week_start_date}</p>
 		</div>
 
-		<div class="alert alert-info text-sm print:hidden shadow-sm">
-			<Icon name="Wallet" size={20} />
-			<span>💰 Estimated total: ₹{totalMin}-{totalMax}</span>
-		</div>
-
-		<div class="card bg-base-100 shadow-sm print:hidden">
-			<div class="card-body p-4 space-y-2">
-				<div class="flex justify-between text-xs text-base-content/70">
-					<span>Shopping progress</span>
-					<span class="font-semibold">{purchasedPct}%</span>
-				</div>
-				<progress class="progress progress-success w-full" value={purchased.length} max={Math.max(totalItems, 1)}></progress>
+		<div class="rounded-3xl bg-sunset p-5 text-white shadow-lg shadow-primary/20 text-center print:hidden">
+			<span class="inline-flex items-center gap-2 text-white/80 text-xs font-semibold uppercase tracking-wide">
+				Estimated total
+				<span class="text-lg leading-none">💰</span>
+			</span>
+			<div class="flex items-baseline justify-center gap-1 mt-1">
+				<span class="font-display text-4xl font-extrabold tabular-nums">₹{totalMin}-{totalMax}</span>
 			</div>
+			<progress
+				class="progress progress-success w-full mt-4 [&::-moz-progress-bar]:bg-white [&::-webkit-progress-bar]:bg-white/20 [&::-webkit-progress-value]:bg-white rounded-full"
+				value={purchased.length}
+				max={Math.max(totalItems, 1)}
+			></progress>
+			<p class="text-white/80 text-xs font-semibold mt-2">{purchasedPct}% done · {purchased.length}/{totalItems} items</p>
 		</div>
 
 		{#each plan.shopping_list as category, ci (category.category)}
-			<div class="card bg-base-100 shadow-sm">
-				<div class="card-body p-4">
-					<h2 class="font-semibold inline-flex items-center gap-2">
-						<span class="h-2.5 w-2.5 rounded-full {aisleColors[ci % aisleColors.length]}"></span>
+			<div class="rounded-3xl bg-base-100 card-lift">
+				<div class="p-4">
+					<h2 class="font-display font-bold text-center inline-flex items-center justify-center gap-2 w-full">
+						<span class="text-xl leading-none">{aisleEmojis[ci % aisleEmojis.length]}</span>
 						{category.category}
 						<span class="badge badge-ghost badge-sm">{category.items.length}</span>
 					</h2>
-					<ul class="divide-y divide-base-300/70">
+					<ul class="divide-y divide-base-300/70 mt-3">
 						{#each category.items as item}
 							{@const key = itemKey(category.category, item.name)}
 							{@const done = purchased.includes(key)}
 							<li class="py-2.5">
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2.5">
 									<input
 										type="checkbox"
 										class="checkbox checkbox-primary checkbox-sm rounded-md"
@@ -154,7 +151,7 @@
 										{item.name}
 										<span class="text-xs text-base-content/60">· {item.qty}{item.unit}</span>
 									</span>
-									<span class="text-xs font-medium text-base-content/60 whitespace-nowrap">
+									<span class="rounded-xl bg-primary/10 px-2 py-1 text-xs font-semibold text-primary whitespace-nowrap">
 										₹{item.est_price_min}-{item.est_price_max}
 									</span>
 								</div>
@@ -175,21 +172,22 @@
 			</div>
 		{/each}
 
-		<div class="fixed bottom-5 inset-x-0 z-20 print:hidden">
-			<div class="mx-auto max-w-lg px-4">
-				<div class="join w-full shadow-lg shadow-primary/20">
-					<button class="btn btn-outline join-item flex-1 gap-1.5 border-base-300" onclick={() => window.print()}>
-						<Icon name="Printer" size={18} />
-						Print
-					</button>
-					<button class="btn btn-primary join-item flex-1 gap-1.5" onclick={share}>
-						<Icon name="Share2" size={18} />
-						Share / Download
-					</button>
-				</div>
+		<div class="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] inset-x-0 z-20 print:hidden">
+			<div class="mx-auto max-w-lg px-4 flex gap-2">
+				<button
+					class="btn btn-lg flex-1 rounded-full gap-1.5 bg-base-200 hover:bg-base-300 border-0"
+					onclick={() => window.print()}
+				>
+					<Icon name="Printer" size={18} />
+					Print
+				</button>
+				<button class="btn btn-primary btn-lg flex-1 rounded-full gap-1.5 shadow-lg shadow-primary/25" onclick={share}>
+					<Icon name="Share2" size={18} />
+					Share / Download
+				</button>
 			</div>
 		</div>
 
-		<div class="h-28 print:hidden"></div>
+		<div class="h-40 print:hidden"></div>
 	</div>
 {/if}
