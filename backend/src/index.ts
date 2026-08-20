@@ -41,7 +41,7 @@ app.use(
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    gemini: config.geminiApiKey ? "configured" : "missing",
+    ai: config.groqApiKey ? "configured (Groq)" : "missing",
     timestamp: new Date().toISOString(),
   });
 });

@@ -221,7 +221,7 @@
 			const started = Date.now();
 			progress = { stage: 'Planning your week', pct: 1, step: 1, partial: {} };
 			let pollInterval = 2000;
-			while (Date.now() - started < 300000) {
+			while (Date.now() - started < 600000) {
 				await new Promise((r) => setTimeout(r, pollInterval));
 				pollInterval = Math.min(pollInterval * 1.15, 4000);
 				const status = await api.getGenerateStatus(res.job_id);

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 import type { ZodTypeAny } from "zod";
 import { config } from "../constants/config.js";
 import type {
@@ -19,8 +19,8 @@ import {
   geminiPricesSchema,
 } from "./geminiSchemas.js";
 
-const MAX_ATTEMPTS = 2;
-const CALL_TIMEOUT_MS = 150_000;
+const MAX_ATTEMPTS = 3;
+const CALL_TIMEOUT_MS = 120_000;
 
 export interface PlanNameEntry {
   day: number;
@@ -49,7 +49,7 @@ export interface ProgressUpdate {
 
 export type ProgressCallback = (update: ProgressUpdate) => void;
 
-const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+const groq = new Groq({ apiKey: config.groqApiKey });
 
 const MOOD_LABELS: Record<Mood, string> = {
   spicy_indian: "spicy Indian classics with bold flavours",
@@ -180,7 +180,7 @@ export function buildPricePrompt(ingredientLines: string[]): string {
   ].join("\n");
 }
 
-export function zodSchemaToGemini(schema: ZodTypeAny): Record<string, unknown> {
+export function zodSchemaToOpenAI(schema: ZodTypeAny): Record<string, unknown> {
   const jsonSchema = schema.toJSONSchema() as Record<string, unknown>;
   delete jsonSchema.$schema;
   const strip = (node: Record<string, unknown>): void => {
@@ -201,29 +201,29 @@ function extractJson(text: string): unknown {
   return JSON.parse(cleaned);
 }
 
-async function callGemini(prompt: string, schema: ZodTypeAny): Promise<unknown> {
+async function callAI(prompt: string, schema: ZodTypeAny): Promise<unknown> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const interaction = await ai.interactions.create(
+      const response = await groq.chat.completions.create(
         {
-          model: config.geminiModel,
-          input: prompt,
-          response_format: {
-            type: "text",
-            mime_type: "application/json",
-            schema: zodSchemaToGemini(schema),
-          },
-          generation_config: {
-            max_output_tokens: 32768,
-            thinking_level: "low" as unknown as never,
-          },
+          model: config.groqModel,
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful Indian meal planning assistant. Always respond with valid JSON only. No markdown, no text outside the JSON.",
+            },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 16384,
+          response_format: { type: "json_object" },
         },
         { timeout: CALL_TIMEOUT_MS },
       );
 
-      const text = interaction.output_text;
-      if (!text) throw new Error("Gemini returned an empty response");
+      const text = response.choices?.[0]?.message?.content;
+      if (!text) throw new Error("Groq returned an empty response");
       const parsed = extractJson(text);
       const result = schema.safeParse(parsed);
       if (!result.success) {
@@ -234,7 +234,7 @@ async function callGemini(prompt: string, schema: ZodTypeAny): Promise<unknown> 
           prompt = `${prompt}\n\nIMPORTANT: Your previous response was REJECTED. Fix ALL of these issues and return only the corrected JSON:\n${details}`;
           continue;
         }
-        throw new Error(`Gemini response failed schema validation (${details})`);
+        throw new Error(`AI response failed schema validation (${details})`);
       }
       return result.data;
     } catch (err) {
@@ -263,8 +263,8 @@ export async function generateMealPlan(
   input: GenerateRequest,
   onProgress?: ProgressCallback,
 ): Promise<GenerateResponse> {
-  if (!config.geminiApiKey) {
-    throw new Error("GEMINI_API_KEY is not configured in the backend environment.");
+  if (!config.groqApiKey) {
+    throw new Error("GROQ_API_KEY is not configured in the backend environment.");
   }
 
   const report = (
@@ -276,7 +276,7 @@ export async function generateMealPlan(
 
   report("Planning your week", 5, 1, {});
 
-  const namesResult = (await callGemini(buildPlanPrompt(input), geminiPlanNamesSchema)) as {
+  const namesResult = (await callAI(buildPlanPrompt(input), geminiPlanNamesSchema)) as {
     meals: PlanNameEntry[];
     seasonal_note?: string;
   };
@@ -288,7 +288,7 @@ export async function generateMealPlan(
   report("Planning your week", 25, 1, partial);
 
   report("Writing recipes & nutrition", 25, 2, partial);
-  const detailResult = (await callGemini(buildDetailPrompt(input, namesResult.meals), geminiMealPlanSchema)) as {
+  const detailResult = (await callAI(buildDetailPrompt(input, namesResult.meals), geminiMealPlanSchema)) as {
     meal_plan: MealDetail[];
   };
 
@@ -325,7 +325,7 @@ export async function generateMealPlan(
     }
   };
 
-  const pricesResult = (await callGemini(buildPricePrompt(ingredientLines.map((l) => l.line)), geminiPricesSchema)) as {
+  const pricesResult = (await callAI(buildPricePrompt(ingredientLines.map((l) => l.line)), geminiPricesSchema)) as {
     ingredient_prices: PriceEntry[];
   };
   applyPrices(pricesResult.ingredient_prices);
@@ -333,7 +333,7 @@ export async function generateMealPlan(
   const missing = ingredientLines.filter((l) => !priceMap.has(l.name.toLowerCase()));
   if (missing.length > 0) {
     const retryPrompt = `${buildPricePrompt(ingredientLines.map((l) => l.line))}\n\nIMPORTANT: You missed prices for these ingredients. Return the COMPLETE list with entries for ALL of them, matching these EXACT names:\n${missing.map((m) => m.line).join("\n")}`;
-    const retryResult = (await callGemini(retryPrompt, geminiPricesSchema)) as {
+    const retryResult = (await callAI(retryPrompt, geminiPricesSchema)) as {
       ingredient_prices: PriceEntry[];
     };
     applyPrices(retryResult.ingredient_prices);
