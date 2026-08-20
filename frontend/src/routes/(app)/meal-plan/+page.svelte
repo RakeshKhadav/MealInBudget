@@ -1,10 +1,16 @@
 <script lang="ts">
 	import { mealPlan } from '$lib/stores/mealPlan.svelte.js';
 	import MealCard from '$lib/components/MealCard.svelte';
-	import Modal from '$lib/components/Modal.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import type { IconName } from '$lib/types/icons.js';
 	import type { Meal, MealType } from '$lib/types/index.js';
+	import { onMount } from 'svelte';
+
+	let Modal = $state<any>(null);
+	onMount(async () => {
+		const mod = await import('$lib/components/Modal.svelte');
+		Modal = mod.default;
+	});
 
 	let selectedDay = $state(1);
 	let selectedMeal = $state<Meal | null>(null);
@@ -144,6 +150,7 @@
 	</div>
 {/if}
 
+{#if Modal}
 <Modal open={selectedMeal !== null} title={selectedMeal?.meal_name} onclose={() => (selectedMeal = null)}>
 	{#snippet hero()}
 		{#if selectedMeal}
@@ -231,3 +238,4 @@
 		{/if}
 	{/if}
 </Modal>
+{/if}

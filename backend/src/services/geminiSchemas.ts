@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-export const geminiIngredientSchema = z.object({
+const geminiIngredientSchema = z.object({
   name: z.string(),
   qty: z.number().positive(),
   unit: z.string(),
 });
 
-export const geminiNutritionSchema = z.object({
+const geminiNutritionSchema = z.object({
   calories: z.number().int().positive(),
   protein_g: z.number().nonnegative(),
   carbs_g: z.number().nonnegative(),
@@ -14,7 +14,7 @@ export const geminiNutritionSchema = z.object({
   fiber_g: z.number().nonnegative(),
 });
 
-export const geminiMealSchema = z.object({
+const geminiMealSchema = z.object({
   day: z.number().int().min(1).max(7),
   meal_type: z.enum(["breakfast", "lunch", "dinner"]),
   meal_name: z.string().min(1),
@@ -28,17 +28,28 @@ export const geminiMealSchema = z.object({
   instructions: z.array(z.string().min(1)).min(1),
 });
 
-export const geminiMealPlanSchema = z.object({
-  meal_plan: z.array(geminiMealSchema).length(21),
+const geminiPlanNameSchema = z.object({
+  day: z.number().int().min(1).max(7),
+  meal_type: z.enum(["breakfast", "lunch", "dinner"]),
+  meal_name: z.string().min(1),
+  cuisine: z.string().min(1),
+});
+
+const geminiWeeklyCostSchema = z.object({
+  name: z.string().min(1),
+  est_weekly_cost_min: z.number().int().nonnegative(),
+  est_weekly_cost_max: z.number().int().nonnegative(),
+});
+
+export const geminiPlanNamesSchema = z.object({
+  meals: z.array(geminiPlanNameSchema).length(21),
   seasonal_note: z.string().optional(),
 });
 
-export const geminiPriceEntrySchema = z.object({
-  name: z.string().min(1),
-  est_price_min: z.number().int().nonnegative(),
-  est_price_max: z.number().int().nonnegative(),
+export const geminiMealPlanSchema = z.object({
+  meal_plan: z.array(geminiMealSchema).length(21),
 });
 
 export const geminiPricesSchema = z.object({
-  ingredient_prices: z.array(geminiPriceEntrySchema).min(1),
+  ingredient_prices: z.array(geminiWeeklyCostSchema).min(1),
 });

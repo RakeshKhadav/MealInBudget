@@ -12,7 +12,8 @@
 		type Appliance,
 		type DietaryRestriction,
 		type GenerateRequest,
-		type Mood
+		type Mood,
+		type PartialPlanData
 	} from '$lib/types/index.js';
 
 	const VEG_VALUES = ['vegetarian', 'non_vegetarian'] as const;
@@ -44,6 +45,28 @@
 		'What can you cook with?',
 		'All set?'
 	];
+	const STEPS = [
+		{ label: 'Dishes' },
+		{ label: 'Recipes & nutrition' },
+		{ label: 'Prices' }
+	];
+	const STEP_HINTS = [
+		'Choosing 21 balanced dishes…',
+		'Calculating macros & nutrition…',
+		'Pricing veggies at Blinkit & Zepto…',
+		'Tallying your weekly total…'
+	];
+	const STAGE_TITLES: Record<string, string> = {
+		'Planning your week': 'Planning your week',
+		'Writing recipes & nutrition': 'Writing recipes & nutrition',
+		'Checking Blinkit & Zepto prices': 'Checking Blinkit & Zepto prices',
+		'Finalising your week': 'Finalising your week'
+	};
+	const MEAL_TYPE_EMOJI: Record<string, string> = {
+		breakfast: '🌅 Breakfast',
+		lunch: '☀️ Lunch',
+		dinner: '🌙 Dinner'
+	};
 
 	let budget = $state(2000);
 	let people = $state(4);
@@ -55,7 +78,36 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let offline = $state(false);
-	let progress = $state<{ stage: string; pct: number } | null>(null);
+	let progress = $state<{ stage: string; pct: number; step: number; partial: PartialPlanData } | null>(null);
+	let displayPct = $state(0);
+
+	const stageTitle = $derived(STAGE_TITLES[progress?.stage ?? ''] ?? 'AI is cooking your week');
+	const hint = $derived(
+		STEP_HINTS[Math.min(Math.max((progress?.step ?? 1) - 1, 0), STEP_HINTS.length - 1)]
+	);
+	const pricesTotalMin = $derived(
+		(progress?.partial.prices ?? []).reduce((acc, p) => acc + p.est_weekly_cost_min, 0)
+	);
+	const pricesTotalMax = $derived(
+		(progress?.partial.prices ?? []).reduce((acc, p) => acc + p.est_weekly_cost_max, 0)
+	);
+
+	$effect(() => {
+		const target = Math.min(progress?.pct ?? 0, 99);
+		if (displayPct >= target) return;
+		let raf = 0;
+		const tick = () => {
+			const diff = target - displayPct;
+			if (diff <= 0.4) {
+				displayPct = target;
+				return;
+			}
+			displayPct = Math.min(target, displayPct + Math.max(0.5, diff * 0.08));
+			raf = requestAnimationFrame(tick);
+		};
+		raf = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(raf);
+	});
 
 	$effect(() => {
 		if (!browser) return;
@@ -167,8 +219,11 @@
 			}
 
 			const started = Date.now();
-			while (Date.now() - started < 240000) {
-				await new Promise((r) => setTimeout(r, 1500));
+			progress = { stage: 'Planning your week', pct: 1, step: 1, partial: {} };
+			let pollInterval = 2000;
+			while (Date.now() - started < 300000) {
+				await new Promise((r) => setTimeout(r, pollInterval));
+				pollInterval = Math.min(pollInterval * 1.15, 4000);
 				const status = await api.getGenerateStatus(res.job_id);
 				if (status.status === 'completed' && status.plan) {
 					await mealPlan.setPlan(status.plan, input);
@@ -178,7 +233,12 @@
 				if (status.status === 'failed') {
 					throw new Error(status.error ?? 'Failed to generate meal plan');
 				}
-				progress = { stage: status.stage ?? 'Working', pct: status.pct ?? 0 };
+				progress = {
+					stage: status.stage ?? 'Working',
+					pct: status.pct ?? 0,
+					step: status.step ?? 1,
+					partial: status.partial ?? {}
+				};
 			}
 			throw new Error('Generation is taking longer than expected - please try again.');
 		} catch (e) {
@@ -382,21 +442,162 @@ class="rounded-3xl p-3 text-left transition-all {moods.includes(m.value)
 			{:else}
 				{#if loading}
 					<div class="rounded-3xl bg-base-200/60 p-6 text-center">
-						<div class="text-5xl leading-none animate-bounce">👨‍🍳</div>
-						<h2 class="font-display text-xl font-extrabold mt-3">AI is cooking your week…</h2>
+						<div class="flex items-center justify-center gap-1.5 flex-wrap">
+							{#each STEPS as s, i (s.label)}
+								{@const state = progress && progress.step > i + 1 ? 'done' : progress && progress.step === i + 1 ? 'active' : 'todo'}
+								<span
+									class="badge badge-sm gap-1 rounded-full transition-all {state === 'done'
+										? 'badge-success text-success-content'
+										: state === 'active'
+											? 'badge-primary text-primary-content shadow-md shadow-primary/25'
+											: 'badge-ghost text-base-content/40'}"
+								>
+									{state === 'done' ? '✓' : i + 1} {s.label}
+								</span>
+							{/each}
+						</div>
+						<div class="text-5xl leading-none animate-bounce mt-4">👨‍🍳</div>
+						<h2 class="font-display text-xl font-extrabold mt-3">{stageTitle}…</h2>
 						<p class="text-sm text-base-content/60 mt-1 min-h-5">
-							{progress?.stage ?? 'Starting…'} · {progress?.pct ?? 0}%
+							{hint} · {Math.round(displayPct)}%
 						</p>
 						<progress
-							class="progress progress-primary w-full mt-4"
-							value={progress?.pct ?? 0}
+							class="progress progress-primary w-full mt-4 transition-[width] duration-200"
+							value={displayPct}
 							max="100"
 						></progress>
 						<p class="text-xs text-base-content/40 mt-4">
-							Searching recipes, food photos & Blinkit/Zepto prices — this can take a
-							couple of minutes.
+							This takes about a minute or two — watch your week come together below.
 						</p>
 					</div>
+
+					{#if progress}
+						<div class="space-y-4 mt-4">
+							<div class="rounded-3xl bg-base-100 p-4 anim-pop">
+								<div class="flex items-center justify-between gap-2 mb-3">
+									<h3 class="font-display font-bold text-sm inline-flex items-center gap-1.5">
+										<span class="text-lg leading-none">🗓️</span> Your week at a glance
+									</h3>
+									<span class="badge badge-ghost badge-sm">{progress.partial.names?.length ?? 0}/21</span>
+								</div>
+								{#if progress.partial.names?.length}
+									<div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+										{#each progress.partial.names as n, i (i)}
+											<div
+												class="rounded-2xl bg-base-200/60 px-3 py-2 anim-pop"
+												style="animation-delay: {i * 40}ms"
+											>
+												<div class="text-[10px] font-semibold text-base-content/50">
+													Day {n.day} · {MEAL_TYPE_EMOJI[n.meal_type]}
+												</div>
+												<div class="font-display text-sm font-bold leading-snug line-clamp-1 mt-0.5">{n.meal_name}</div>
+												<div class="text-[10px] text-base-content/50">{n.cuisine}</div>
+											</div>
+										{/each}
+									</div>
+									{#if progress.partial.seasonal_note}
+										<p class="text-xs text-base-content/60 mt-3 flex items-start gap-1.5">
+											<span>🌿</span><span>{progress.partial.seasonal_note}</span>
+										</p>
+									{/if}
+								{:else}
+									<div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+										{#each Array(6) as _, i (i)}
+											<div class="rounded-2xl bg-base-200/60 p-3 space-y-2 animate-pulse">
+												<div class="h-2 w-1/3 rounded bg-base-300"></div>
+												<div class="h-3 w-3/4 rounded bg-base-300"></div>
+												<div class="h-2 w-1/2 rounded bg-base-300"></div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+
+							<div class="rounded-3xl bg-base-100 p-4 anim-pop">
+								<div class="flex items-center justify-between gap-2 mb-3">
+									<h3 class="font-display font-bold text-sm inline-flex items-center gap-1.5">
+										<span class="text-lg leading-none">🍳</span> Recipes & nutrition
+									</h3>
+									<span class="badge badge-ghost badge-sm">{progress.partial.meals?.length ?? 0}/21</span>
+								</div>
+								{#if progress.partial.meals?.length}
+									<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+										{#each progress.partial.meals as m, i (i)}
+											<div
+												class="rounded-2xl bg-base-200/60 p-3 anim-pop"
+												style="animation-delay: {i * 45}ms"
+											>
+												<div class="flex items-center justify-between gap-2">
+													<span class="text-[10px] font-semibold text-base-content/50">
+														Day {m.day} · {MEAL_TYPE_EMOJI[m.meal_type]}
+													</span>
+													<span class="badge badge-ghost badge-xs">{m.cuisine}</span>
+												</div>
+												<div class="font-display text-sm font-bold leading-snug line-clamp-1 mt-0.5">{m.meal_name}</div>
+												<div class="flex flex-wrap gap-1.5 mt-1.5 text-[10px] font-semibold">
+													<span class="rounded-lg bg-error/10 px-1.5 py-0.5 text-error">🔥 {m.nutritional_info.calories} kcal</span>
+													<span class="rounded-lg bg-primary/10 px-1.5 py-0.5 text-primary">💪 {m.nutritional_info.protein_g}g</span>
+													<span class="rounded-lg bg-success/10 px-1.5 py-0.5 text-success">🌿 {m.nutritional_info.fiber_g}g</span>
+													<span class="rounded-lg bg-base-300/60 px-1.5 py-0.5 text-base-content/60">⏱ {m.cooking_time_mins}m</span>
+												</div>
+											</div>
+										{/each}
+									</div>
+								{:else if progress.step >= 2}
+									<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+										{#each Array(4) as _, i (i)}
+											<div class="rounded-2xl bg-base-200/60 p-3 space-y-2 animate-pulse">
+												<div class="h-2 w-1/3 rounded bg-base-300"></div>
+												<div class="h-3 w-3/4 rounded bg-base-300"></div>
+												<div class="flex gap-1.5">
+													<div class="h-4 w-14 rounded bg-base-300"></div>
+													<div class="h-4 w-14 rounded bg-base-300"></div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+
+							<div class="rounded-3xl bg-base-100 p-4 anim-pop">
+								<h3 class="font-display font-bold text-sm inline-flex items-center gap-1.5 mb-3">
+									<span class="text-lg leading-none">💰</span> Weekly cost estimate
+								</h3>
+								{#if progress.partial.prices?.length}
+									<div class="rounded-2xl bg-sunset p-4 text-white text-center">
+										<span class="text-white/80 text-[10px] font-semibold uppercase tracking-wide">Estimated total</span>
+										<div class="font-display text-3xl font-extrabold tabular-nums mt-0.5">
+											₹{pricesTotalMin}-{pricesTotalMax}
+										</div>
+										<p class="text-white/70 text-[10px] mt-1">
+											weekly cost · {progress.partial.prices.length} ingredients
+										</p>
+									</div>
+									<div class="mt-2.5 flex flex-wrap gap-1.5">
+										{#each progress.partial.prices.slice(0, 12) as p, i (i)}
+											<span class="rounded-full bg-base-200/70 px-2.5 py-1 text-[10px] font-semibold text-base-content/70 anim-pop" style="animation-delay: {i * 40}ms">
+												{p.name} <span class="text-base-content/50">₹{p.est_weekly_cost_min}-{p.est_weekly_cost_max}</span>
+											</span>
+										{/each}
+										{#if progress.partial.prices.length > 12}
+											<span class="rounded-full bg-base-200/70 px-2.5 py-1 text-[10px] font-semibold text-base-content/50">
+												+{progress.partial.prices.length - 12} more
+											</span>
+										{/if}
+									</div>
+								{:else if progress.step >= 3}
+									<div class="space-y-2 animate-pulse">
+										<div class="h-16 rounded-2xl bg-base-200/60"></div>
+										<div class="flex flex-wrap gap-1.5">
+											{#each Array(6) as _, i (i)}
+												<div class="h-5 w-24 rounded-full bg-base-200/60"></div>
+											{/each}
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+					{/if}
 				{:else}
 				<div class="grid grid-cols-2 gap-3">
 					<button
@@ -540,6 +741,9 @@ class="rounded-3xl p-3 text-left transition-all {moods.includes(m.value)
 	.anim-back {
 		animation: slide-in-back 260ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
+	.anim-pop {
+		animation: pop-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
 	@keyframes slide-in {
 		from {
 			opacity: 0;
@@ -554,6 +758,16 @@ class="rounded-3xl p-3 text-left transition-all {moods.includes(m.value)
 		from {
 			opacity: 0;
 			transform: translateX(-28px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	@keyframes pop-in {
+		from {
+			opacity: 0;
+			transform: translateY(10px) scale(0.98);
 		}
 		to {
 			opacity: 1;

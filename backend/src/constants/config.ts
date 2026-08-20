@@ -11,7 +11,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
-  rateLimitGenerateWindowMs: Number(process.env.RATE_LIMIT_GENERATE_WINDOW_MS ?? 120000),
+  rateLimitGenerateWindowMs: Math.max(Number(process.env.RATE_LIMIT_GENERATE_WINDOW_MS ?? 120000) || 120000, 1),
   rateLimitGenerateMax: Number(process.env.RATE_LIMIT_GENERATE_MAX ?? 1),
   rateLimitGlobalPerMin: Number(process.env.RATE_LIMIT_GLOBAL_PER_MIN ?? 120),
 };

@@ -9,6 +9,8 @@ export interface GenerateJob {
   status: JobStatus;
   stage: string;
   pct: number;
+  step: number;
+  partial: ProgressUpdate["partial"];
   error?: string;
   plan?: GenerateResponse;
   created_at: string;
@@ -16,6 +18,28 @@ export interface GenerateJob {
 
 const jobs = new Map<string, GenerateJob>();
 const planCache = new Map<string, GenerateResponse>();
+const JOB_TTL_MS = 3600_000; // 1 hour
+const PLAN_CACHE_MAX = 50;
+const CLEANUP_INTERVAL_MS = 60_000;
+
+// Periodic cleanup of stale jobs to prevent memory leaks
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+function startCleanup(): void {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - JOB_TTL_MS;
+    for (const [id, job] of jobs) {
+      if (new Date(job.created_at).getTime() < cutoff) {
+        jobs.delete(id);
+      }
+    }
+  }, CLEANUP_INTERVAL_MS);
+  // Unref so the timer doesn't keep the process alive
+  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
+    (cleanupTimer as NodeJS.Timeout).unref();
+  }
+}
+startCleanup();
 
 function cacheKey(input: GenerateRequest): string {
   return JSON.stringify({
@@ -37,8 +61,10 @@ function weekKey(): string {
 
 function rememberPlan(input: GenerateRequest, plan: GenerateResponse): void {
   const key = `${weekKey()}|${cacheKey(input)}`;
+  // Move to end (most recent) if already present, then enforce cap
+  planCache.delete(key);
   planCache.set(key, plan);
-  if (planCache.size > 20) {
+  while (planCache.size > PLAN_CACHE_MAX) {
     const oldest = planCache.keys().next().value;
     if (oldest) planCache.delete(oldest);
   }
@@ -58,6 +84,8 @@ export function createJob(input: GenerateRequest): GenerateJob {
     status: "queued",
     stage: "Queued",
     pct: 0,
+    step: 1,
+    partial: {},
     created_at: new Date().toISOString(),
   };
   jobs.set(job.job_id, job);
@@ -77,11 +105,15 @@ async function runJob(job: GenerateJob, input: GenerateRequest): Promise<void> {
   job.status = "generating";
   job.stage = "Starting";
   job.pct = 1;
+  job.step = 1;
+  job.partial = {};
 
   try {
     const onProgress = (u: ProgressUpdate) => {
       job.stage = u.stage;
       job.pct = u.pct;
+      job.step = u.step;
+      job.partial = u.partial;
     };
     const plan = await generateMealPlan(input, onProgress);
     savePlan(plan, input);

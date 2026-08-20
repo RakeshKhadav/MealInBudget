@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import { config } from "./constants/config.js";
 import { mealsGenerateRouter } from "./routes/mealsGenerate.js";
@@ -12,10 +13,17 @@ import { ZodError } from "zod";
 const app = express();
 
 app.use(cors({ origin: config.corsOrigin.split(",") }));
+app.use(compression());
 app.use(express.json());
 
 const rateLimitMessage = (retryAfter: number) =>
   `Too many requests - please wait about ${Math.max(1, Math.ceil(retryAfter / 60))} minute(s) before trying again.`;
+
+// Cache-control: dynamic API responses should not be cached by browsers
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 app.use(
   "/api",

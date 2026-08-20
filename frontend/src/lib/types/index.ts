@@ -76,6 +76,26 @@ export interface GenerateResponse {
 	nutritional_summary: NutritionalSummary;
 }
 
+export interface PlanNameEntry {
+	day: number;
+	meal_type: MealType;
+	meal_name: string;
+	cuisine: string;
+}
+
+export interface PriceEntry {
+	name: string;
+	est_weekly_cost_min: number;
+	est_weekly_cost_max: number;
+}
+
+export interface PartialPlanData {
+	names?: PlanNameEntry[];
+	seasonal_note?: string;
+	meals?: Meal[];
+	prices?: PriceEntry[];
+}
+
 export interface PlanSummary {
 	id: string;
 	week_start_date: string;

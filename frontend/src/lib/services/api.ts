@@ -1,4 +1,4 @@
-import type { GenerateRequest, GenerateResponse, Preferences } from '$lib/types/index.js';
+import type { GenerateRequest, GenerateResponse, PartialPlanData, Preferences } from '$lib/types/index.js';
 
 const API_URL = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3000/api';
 
@@ -9,6 +9,8 @@ export interface GenerateJobResult {
 	status: GenerateJobStatus;
 	stage?: string;
 	pct?: number;
+	step?: number;
+	partial?: PartialPlanData;
 	error?: string;
 	plan?: GenerateResponse;
 }

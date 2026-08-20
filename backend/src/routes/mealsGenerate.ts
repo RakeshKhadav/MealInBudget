@@ -41,6 +41,8 @@ mealsGenerateRouter.get("/:jobId", (req, res) => {
     status: job.status,
     stage: job.stage,
     pct: job.pct,
+    step: job.step,
+    partial: job.partial,
     error: job.error,
     plan: job.status === "completed" ? job.plan : undefined,
   });
