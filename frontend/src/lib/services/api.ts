@@ -1,6 +1,7 @@
 import type { GenerateRequest, GenerateResponse, PartialPlanData, Preferences } from '$lib/types/index.js';
+import { PUBLIC_API_URL } from '$env/static/public';
 
-const API_URL = import.meta.env.PUBLIC_API_URL ?? 'http://localhost:3000/api';
+const API_URL = PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export type GenerateJobStatus = 'queued' | 'generating' | 'completed' | 'failed';
 
