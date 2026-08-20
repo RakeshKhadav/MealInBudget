@@ -218,13 +218,12 @@ async function callAI(prompt: string, schema: ZodTypeAny): Promise<unknown> {
           messages: [
             {
               role: "system",
-              content: "You are a helpful Indian meal planning assistant. Always respond with valid JSON only. No markdown, no text outside the JSON.",
+              content: "You are a helpful Indian meal planning assistant. Always respond with valid JSON only. No markdown, no text outside the JSON. The response must be parseable by JSON.parse().",
             },
             { role: "user", content: prompt },
           ],
           temperature: 0.7,
           max_tokens: 16384,
-          response_format: { type: "json_object" },
         },
         { timeout: CALL_TIMEOUT_MS },
       );
