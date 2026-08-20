@@ -63,3 +63,19 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
 app.listen(config.port, () => {
   console.log(`MealinBudget API listening on http://localhost:${config.port}`);
 });
+
+// Keep-alive: ping ourselves every 5 minutes to prevent Render free tier spin-down
+const SELF_PING_URL = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${config.port}`;
+const SELF_PING_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+if (process.env.NODE_ENV === "production" || process.env.RENDER) {
+  const keepAlive = setInterval(async () => {
+    try {
+      await fetch(`${SELF_PING_URL}/api/health`);
+    } catch {
+      // Ignore ping failures — just trying to keep the process active
+    }
+  }, SELF_PING_INTERVAL_MS);
+  // Unref so the timer doesn't keep the process alive on shutdown
+  keepAlive.unref();
+}
