@@ -9,8 +9,8 @@ try {
 export const config = {
   port: Number(process.env.PORT ?? 3000),
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
-  groqApiKey: process.env.GROQ_API_KEY ?? "",
-  groqModel: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+  openrouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
+  openrouterModel: process.env.OPENROUTER_MODEL ?? "dots-studio/dots-3-note-preview:free",
   rateLimitGenerateWindowMs: Math.max(Number(process.env.RATE_LIMIT_GENERATE_WINDOW_MS ?? 120000) || 120000, 1),
   rateLimitGenerateMax: Number(process.env.RATE_LIMIT_GENERATE_MAX ?? 1),
   rateLimitGlobalPerMin: Number(process.env.RATE_LIMIT_GLOBAL_PER_MIN ?? 120),

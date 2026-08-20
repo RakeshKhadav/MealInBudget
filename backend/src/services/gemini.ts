@@ -1,4 +1,4 @@
-import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { ZodTypeAny } from "zod";
 import { config } from "../constants/config.js";
 import type {
@@ -20,7 +20,7 @@ import {
 } from "./geminiSchemas.js";
 
 const MAX_ATTEMPTS = 3;
-const CALL_TIMEOUT_MS = 120_000;
+const CALL_TIMEOUT_MS = 180_000;
 
 export interface PlanNameEntry {
   day: number;
@@ -49,7 +49,14 @@ export interface ProgressUpdate {
 
 export type ProgressCallback = (update: ProgressUpdate) => void;
 
-const groq = new Groq({ apiKey: config.groqApiKey });
+const openrouter = new OpenAI({
+  apiKey: config.openrouterApiKey,
+  baseURL: "https://openrouter.ai/api/v1",
+  defaultHeaders: {
+    "HTTP-Referer": "https://mealinbudget.com",
+    "X-Title": "MealinBudget",
+  },
+});
 
 const MOOD_LABELS: Record<Mood, string> = {
   spicy_indian: "spicy Indian classics with bold flavours",
@@ -205,9 +212,9 @@ async function callAI(prompt: string, schema: ZodTypeAny): Promise<unknown> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await groq.chat.completions.create(
+      const response = await openrouter.chat.completions.create(
         {
-          model: config.groqModel,
+          model: config.openrouterModel,
           messages: [
             {
               role: "system",
@@ -223,7 +230,7 @@ async function callAI(prompt: string, schema: ZodTypeAny): Promise<unknown> {
       );
 
       const text = response.choices?.[0]?.message?.content;
-      if (!text) throw new Error("Groq returned an empty response");
+      if (!text) throw new Error("OpenRouter returned an empty response");
       const parsed = extractJson(text);
       const result = schema.safeParse(parsed);
       if (!result.success) {
@@ -263,8 +270,8 @@ export async function generateMealPlan(
   input: GenerateRequest,
   onProgress?: ProgressCallback,
 ): Promise<GenerateResponse> {
-  if (!config.groqApiKey) {
-    throw new Error("GROQ_API_KEY is not configured in the backend environment.");
+  if (!config.openrouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured in the backend environment.");
   }
 
   const report = (

@@ -41,7 +41,7 @@ app.use(
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    ai: config.groqApiKey ? "configured (Groq)" : "missing",
+    ai: config.openrouterApiKey ? "configured (OpenRouter)" : "missing",
     timestamp: new Date().toISOString(),
   });
 });
